@@ -92,11 +92,11 @@ serve(async (req: Request) => {
     const supabaseAdminClient = createClient(supabaseUrl, supabaseServiceRoleKey);
     const { data: apiKeyData, error: apiKeyError } = await supabaseAdminClient
       .from("user_llm_api_keys")
-      .select("api_key_encrypted") // Assuming this column holds the usable key for MVP
+      .select("api_key") // Changed from api_key_encrypted as per CFF-013.B (keys are plaintext for MVP)
       .eq("user_id", user.id)
       .single();
 
-    if (apiKeyError || !apiKeyData || !apiKeyData.api_key_encrypted) {
+    if (apiKeyError || !apiKeyData || !apiKeyData.api_key) {
       if (apiKeyError && apiKeyError.code === 'PGRST116') { // PGRST116: "The result contains 0 rows"
          console.warn(`API key not found for user ${user.id}`);
          return jsonResponse({ success: false, error: "OpenAI API key not set up for this user." }, 403);
@@ -104,7 +104,7 @@ serve(async (req: Request) => {
       console.error(`Error retrieving API key for user ${user.id}:`, apiKeyError?.message);
       return jsonResponse({ success: false, error: "Failed to retrieve API key." }, 500);
     }
-    const userOpenAIKey = apiKeyData.api_key_encrypted;
+    const userOpenAIKey = apiKeyData.api_key;
 
     // 4. LLM Prompt Construction
     const { labelText = "", placeholder = "", currentValue = "" } = fieldContext;
