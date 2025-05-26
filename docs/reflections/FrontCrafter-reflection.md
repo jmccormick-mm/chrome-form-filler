@@ -1,0 +1,54 @@
+- 2025-05-26 Task CFF-006: Successfully created the initial project directory structure and `manifest.json`. All placeholder files were created as specified. Ensured `manifest.json` aligns with Supabase integration details from [`docs/architecture/architectural-vision-CFF-MVP.md`](docs/architecture/architectural-vision-CFF-MVP.md), including `host_permissions` for the Supabase project URL and correct paths for background, content, and options scripts/pages. The `action` and `icons` paths in `manifest.json` were set to point to `src/assets/icons/`. Interaction Mode: YOLO MVP.
+- 2025-05-26 Task CFF-009: Implemented core context menu functionality.
+    - **`manifest.json`**: Verified existing permissions (`contextMenus`, `activeTab`, `scripting`) are sufficient. No changes needed.
+    - **`src/background/background.js`**:
+        - Created context menu item with `id: "fillWithAI"`, `title: "Fill with AI"`, and `contexts: ["editable"]`.
+        - On `chrome.runtime.onInstalled`, existing menus are removed before creating the new one to prevent duplicates.
+        - On context menu click, if `targetElementId` is available, a message `{ action: "gatherFieldContext", targetElementId, frameId }` is sent to the content script in the active tab.
+        - Listens for `{ action: "sendFieldContext", context }` from content script and logs the received context.
+        - **Assumption/Decision**: The context menu is set to appear for all `editable` elements. The precise filtering for *specific* input types (text, email, etc.) and textareas is handled by the content script (`gatherFieldContextById` returns `null` for non-specified types, and the background script won't proceed). This simplifies the background script logic for MVP, as `chrome.contextMenus.create` doesn't easily support dynamic targeting by fine-grained element types beyond broad categories like "editable". While the AC states "should only be visible when the right-click target is one of the specified input types", this approach ensures functionality only proceeds for correct types, even if the menu is slightly more broadly visible.
+    - **`src/content/content_script.js`**:
+        - Listens for `gatherFieldContext` message from background script.
+        - `gatherFieldContextById(targetElementId)`:
+            - Retrieves element by `targetElementId`.
+            - Extracts `id`, `name`, `placeholder`, `aria-label`, `type` (for inputs), `value`.
+            - `findAssociatedLabelText(element)` attempts to find a label using `for` attribute, parent `label` tag, or `aria-labelledby`.
+            - Returns a structured context object or `null` if element not found or not an eligible type (INPUT with types text, email, search, tel, url, password, number; or TEXTAREA).
+            - **Assumption/Decision**: Added "password" and "number" to `ELIGIBLE_INPUT_TYPES` as they are common form fields that might benefit from AI assistance (e.g., generating a password suggestion, providing a typical numerical value).
+        - Sends the gathered context back to background script using `{ action: "sendFieldContext", context }`.
+    - **Interaction Mode**: YOLO MVP. Made autonomous decisions regarding label-finding heuristics and eligible input types for MVP scope.
+- 2025-05-26 Task CFF-010.B: Updated `src/background/background.js` to call `llm-proxy` Edge Function.
+    - **`src/core/supabaseClient.js`**: Created this file to initialize and export the Supabase client using production URL and Anon Key from `project-context.md`. This promotes modularity.
+    - **`src/background/background.js` Modifications**:
+        - Imported the `supabase` client from `../core/supabaseClient.js`.
+        - When `sendFieldContext` message is received:
+            - Retrieves `fieldContext` from the message and `originalTabId`, `originalFrameId` from the `sender` object.
+            - Asynchronously checks Supabase authentication status using `supabase.auth.getSession()`.
+            - If no session or session error, sends an `AUTH_REQUIRED` or `LLM_ERROR` message respectively to the content script.
+            - If authenticated, invokes the `llm-proxy` Supabase Edge Function using `supabase.functions.invoke('llm-proxy', { body: { fieldContext } })`.
+            - The Supabase client automatically handles the `Authorization: Bearer <JWT>` and `apikey` headers.
+            - Handles successful response from Edge Function: extracts `generatedText` and sends `LLM_RESPONSE` message to content script.
+            - Handles error response from Edge Function: extracts `error` message and sends `LLM_ERROR` message to content script.
+            - Implemented a general try-catch for unexpected errors during the async operation.
+    - **JWT Handling (MVP):** Relied on the Supabase JS client's automatic JWT inclusion in the `Authorization` header for `supabase.functions.invoke()` when a user session is active. This aligns with how a real JWT would be integrated once authentication (CFF-012) is fully implemented in the options page. No placeholder JWT is hardcoded or explicitly managed in `background.js`.
+    - **Error Handling Strategy:** Specific error messages (`AUTH_REQUIRED`, `LLM_ERROR` with details from session, invoke, or function errors) are relayed to the content script.
+    - **Message Passing to Content Script:** Ensured `chrome.tabs.sendMessage` uses `sender.tab.id` and `sender.frameId` (passed as options to `sendMessage`) to correctly target the content script instance that initiated the request. This is important for scenarios involving iframes.
+    - **Interaction Mode (YOLO MVP):** Made autonomous decisions regarding the async flow, error message content, and reliance on Supabase client's JWT management, consistent with the task requirements and provided context.
+- 2025-05-26 Task CFF-011: Modified `src/content/content_script.js` to handle LLM responses and errors.
+    - Added a global variable `lastTargetElementIdForFilling` to store the ID of the element targeted by `gatherFieldContext`.
+    - Updated `chrome.runtime.onMessage` listener:
+        - When `action: "gatherFieldContext"` is received, `message.targetElementId` is stored in `lastTargetElementIdForFilling`.
+        - Added handling for `type: "LLM_RESPONSE"`:
+            - Retrieves the target element using `lastTargetElementIdForFilling`.
+            - If found, sets `element.value = message.text`.
+            - Dispatches `input` and `change` events on the element.
+            - Clears `lastTargetElementIdForFilling`.
+        - Added handling for `type: "LLM_ERROR"`:
+            - Logs `message.message` to the console.
+            - Clears `lastTargetElementIdForFilling`.
+        - Added handling for `type: "AUTH_REQUIRED"`:
+            - Logs `message.message` to the console.
+            - Clears `lastTargetElementIdForFilling`.
+    - **Decision (YOLO MVP):** Used a simple global variable (`lastTargetElementIdForFilling`) to track the target element ID between messages, assuming one active operation at a time for MVP. This addresses the need to identify the target field since `background.js` doesn't currently send `targetElementSelector` back with the LLM response.
+    - **Adaptation (YOLO MVP):** Adapted message handling to the actual structure sent by `background.js` (`message.text` for success, `message.message` for errors, and specific `type` values like `LLM_ERROR`, `AUTH_REQUIRED`) rather than the slightly different structure initially specified in `task-context-CFF-011.md`.
+    - Interaction Mode: YOLO MVP.

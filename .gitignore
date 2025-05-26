@@ -1,0 +1,58 @@
+# Node.js
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+package-lock.json
+
+# Operating System Files
+.DS_Store
+Thumbs.db
+._*
+
+# IDE & Editor Files
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Build Artifacts & Packaged Extension Files
+dist/
+build/
+*.zip
+*.crx
+*.rar
+
+# Local Environment Files
+.env
+.env.local
+.env.*.local
+!.env.example
+
+# Supabase Local Development
+supabase/temp/
+supabase/.branches/
+supabase/.temp/
+supabase/db/dumps/
+supabase/functions/.edge-runtime-state/
+supabase/volumes/
+supabase/**/*.log
+# Add any other Supabase specific patterns if they become known
+
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Coverage directory used by tools like istanbul
+coverage
+
+# Misc
+.eslintcache
+.roomodes
+.roo/
