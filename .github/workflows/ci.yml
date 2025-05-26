@@ -1,0 +1,57 @@
+# .github/workflows/ci.yml
+
+name: Supabase CI/CD
+
+on:
+  push:
+    branches:
+      - master  # Or your primary branch
+
+env:
+  # This makes the Supabase access token available to all jobs in the workflow
+  SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+  # Your Supabase project ID, found in your project's URL
+  PROJECT_ID: pdwkntyrmxwnthcpsxad
+
+jobs:
+  # This job handles deploying your database migrations
+  deploy-migrations:
+    runs-on: ubuntu-latest
+    name: Deploy Database Migrations
+    
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Supabase CLI
+        uses: supabase/setup-cli@v1
+        with:
+          version: latest # Use the latest version of the CLI
+
+      - name: Link Supabase Project
+        # The project-ref is read from the PROJECT_ID environment variable
+        run: supabase link --project-ref $PROJECT_ID
+
+      - name: Deploy Database Migrations
+        # The database password is required for pushing schema changes
+        env:
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+        run: supabase db push
+
+  # This job handles deploying your Edge Functions
+  deploy-functions:
+    runs-on: ubuntu-latest
+    name: Deploy Edge Functions
+    needs: deploy-migrations # This ensures functions are deployed only after migrations succeed
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Supabase CLI
+        uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Deploy Supabase Edge Functions
+        run: supabase functions deploy --project-ref $PROJECT_ID
